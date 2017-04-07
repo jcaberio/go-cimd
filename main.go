@@ -5,8 +5,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/spf13/viper"
 	"github.com/jcaberio/go-cimd/cimd"
+	"github.com/spf13/viper"
 )
 
 func main() {

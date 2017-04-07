@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -35,7 +36,7 @@ func NewPDU(c net.Conn) (*PDU, error) {
 		data[param] = val
 	}
 	rawHeader := pduPartsETXOmitted[0]
-	header := bytes.TrimFunc(rawHeader, func (c rune) bool {return c == STX || c == ETX})
+	header := bytes.TrimFunc(rawHeader, func(c rune) bool { return c == STX || c == ETX })
 	cmdAndSeq := bytes.Split(header, []byte{COLON})
 	cmdID := cmdAndSeq[0]
 	seqNum := cmdAndSeq[1]
@@ -64,11 +65,44 @@ func (p *PDU) Decode() {
 	case SUBMIT_MSG:
 		log.Println("SUBMIT_MESSAGE COMMAND")
 		p.SubmitMessageResp(p.SubmitMessage())
+		go func() {
+			time.Sleep(2 * time.Second)
+			p.DeliverStatusReport()
+		}()
+	case DELIVER_STAT_REPORT_RESP:
+		log.Println("DELIVER_STAT_REPORT_RESP COMMAND")
 
 	default:
 		log.Println("UNKNOWN COMMAND")
 		p.UnknownCmd()
 	}
+}
+
+func (p *PDU) DeliverStatusReport() {
+	byteToWrite := make([]byte, 0)
+	byteToWrite = append(byteToWrite, STX)
+	byteToWrite = append(byteToWrite, DELIVER_STAT_REPORT_REQ...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, NextSeqNum()...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, DST_ADDR_RESP...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, []byte(p.Data[DST_ADDR])...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, SVC_CENTER_RESP...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, SVC_CENTER_TIMESTAMP...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, STATUS_CODE...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, []byte(SUCCESSFUL_DELIVERY)...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, DISCHARGE_TIME...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, SVC_CENTER_TIMESTAMP...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, ETX)
+	p.Conn.Write(byteToWrite)
 }
 
 func (p *PDU) LoginResp(b bool) {

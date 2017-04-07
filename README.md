@@ -9,6 +9,7 @@ Supported operations
 - Logout
 - Alive
 - Submit message
+- Deliver status report
 
 
 ### config
