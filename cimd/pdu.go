@@ -157,7 +157,7 @@ func (p *PDU) Authenticate() bool {
 func (p *PDU) KeepAlive() {
 	byteToWrite := make([]byte, 0)
 	byteToWrite = append(byteToWrite, STX)
-	byteToWrite = append(byteToWrite, KEEP_ALIVE_RESP...)
+	byteToWrite = append(byteToWrite, ALIVE_RESP...)
 	byteToWrite = append(byteToWrite, COLON)
 	byteToWrite = append(byteToWrite, p.SeqNum...)
 	byteToWrite = append(byteToWrite, TAB)

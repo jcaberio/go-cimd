@@ -22,24 +22,24 @@ const (
 	USER_DATA                = "033"
 	SUCCESSFUL_DELIVERY      = "4"
 	DELIVER_STAT_REPORT_RESP = "73"
+	DELIVER_STAT_REPORT_REQ  = "23"
+	LOGIN_RESP               = "51"
+	LOGOUT_RESP              = "52"
+	GENERAL_ERROR_RESP       = "98"
+	ERROR_CODE               = "900"
+	INVALID_LOGIN            = "100"
+	UNEXPECTED_OPERATION     = "1"
+	ALIVE_RESP               = "90"
+	SUBMIT_MSG_RESP          = "53"
+	DST_ADDR_RESP            = "021"
+	SVC_CENTER_RESP          = "060"
+	STATUS_CODE              = "061"
+	DISCHARGE_TIME           = "064"
 )
 
 var (
-	seqNum                  int32 = 0
-	DELIVER_STAT_REPORT_REQ       = []byte{50, 51}
-	LOGIN_RESP                    = []byte{53, 49}
-	LOGOUT_RESP                   = []byte{53, 50}
-	GENERAL_ERROR_RESP            = []byte{57, 56}
-	ERROR_CODE                    = []byte{57, 48, 48}
-	INVALID_LOGIN                 = []byte{49, 48, 48}
-	UNEXPECTED_OPERATION          = []byte{49}
-	KEEP_ALIVE_RESP               = []byte{57, 48}
-	SUBMIT_MSG_RESP               = []byte{53, 51}
-	DST_ADDR_RESP                 = []byte{48, 50, 49}
-	SVC_CENTER_RESP               = []byte{48, 54, 48}
-	SVC_CENTER_TIMESTAMP          = []byte(time.Now().Format("20060102150405"))
-	STATUS_CODE                   = []byte{48, 54, 49}
-	DISCHARGE_TIME                = []byte{48, 54, 51}
+	seqNum               int32 = 0
+	SVC_CENTER_TIMESTAMP       = []byte(time.Now().Format("20060102150405"))
 )
 
 func NextSeqNum() []byte {
