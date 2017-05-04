@@ -14,7 +14,7 @@ func main() {
 	viper.AddConfigPath(".")
 	viper.ReadInConfig()
 	port := fmt.Sprint(":", viper.GetInt("port"))
-	welcomeMsg := fmt.Sprint("\n", viper.GetString("greeting"))
+	welcomeMsg := fmt.Sprint(viper.GetString("greeting"))
 	ln, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Println(err)
@@ -25,7 +25,6 @@ func main() {
 		if err != nil {
 			log.Println(err)
 		}
-
 		go handleConnection(conn)
 		conn.Write([]byte(welcomeMsg))
 	}

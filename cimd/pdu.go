@@ -65,10 +65,18 @@ func (p *PDU) Decode() {
 	case SUBMIT_MSG:
 		log.Println("SUBMIT_MESSAGE COMMAND")
 		p.SubmitMessageResp(p.SubmitMessage())
-		go func() {
-			time.Sleep(2 * time.Second)
-			p.DeliverStatusReport()
-		}()
+		arrivalTime := []byte(time.Now().Format("20060102150405"))
+		go func(arrivalTime []byte) {
+			const DELIVERY_SUCCESSFUL = "8"
+			log.Println("p.Data[STATUS_REPORT_REQUEST]: ", p.Data[STATUS_REPORT_REQUEST])
+			if p.Data[STATUS_REPORT_REQUEST] == DELIVERY_SUCCESSFUL {
+				deliveryDelay := viper.GetInt("delivery_delay")
+				time.Sleep(time.Duration(deliveryDelay) * time.Second)
+				deliveryTime := []byte(time.Now().Format("20060102150405"))
+				p.DeliverStatusReport(arrivalTime, deliveryTime)
+			}
+
+		}(arrivalTime)
 	case DELIVER_STAT_REPORT_RESP:
 		log.Println("DELIVER_STAT_REPORT_RESP COMMAND")
 
@@ -78,7 +86,7 @@ func (p *PDU) Decode() {
 	}
 }
 
-func (p *PDU) DeliverStatusReport() {
+func (p *PDU) DeliverStatusReport(arrivalTime, deliveryTime []byte) {
 	byteToWrite := make([]byte, 0)
 	byteToWrite = append(byteToWrite, STX)
 	byteToWrite = append(byteToWrite, DELIVER_STAT_REPORT_REQ...)
@@ -91,7 +99,7 @@ func (p *PDU) DeliverStatusReport() {
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, SVC_CENTER_RESP...)
 	byteToWrite = append(byteToWrite, COLON)
-	byteToWrite = append(byteToWrite, SVC_CENTER_TIMESTAMP...)
+	byteToWrite = append(byteToWrite, arrivalTime...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, STATUS_CODE...)
 	byteToWrite = append(byteToWrite, COLON)
@@ -99,7 +107,7 @@ func (p *PDU) DeliverStatusReport() {
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, DISCHARGE_TIME...)
 	byteToWrite = append(byteToWrite, COLON)
-	byteToWrite = append(byteToWrite, SVC_CENTER_TIMESTAMP...)
+	byteToWrite = append(byteToWrite, deliveryTime...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, ETX)
 	p.Conn.Write(byteToWrite)
@@ -175,6 +183,7 @@ func (p *PDU) SubmitMessage() bool {
 
 func (p *PDU) SubmitMessageResp(b bool) {
 	if b {
+		arrivalTime := []byte(time.Now().Format("20060102150405"))
 		byteToWrite := make([]byte, 0)
 		byteToWrite = append(byteToWrite, STX)
 		byteToWrite = append(byteToWrite, SUBMIT_MSG_RESP...)
@@ -187,7 +196,7 @@ func (p *PDU) SubmitMessageResp(b bool) {
 		byteToWrite = append(byteToWrite, TAB)
 		byteToWrite = append(byteToWrite, SVC_CENTER_RESP...)
 		byteToWrite = append(byteToWrite, COLON)
-		byteToWrite = append(byteToWrite, SVC_CENTER_TIMESTAMP...)
+		byteToWrite = append(byteToWrite, arrivalTime...)
 		byteToWrite = append(byteToWrite, TAB)
 		byteToWrite = append(byteToWrite, ETX)
 		p.Conn.Write(byteToWrite)

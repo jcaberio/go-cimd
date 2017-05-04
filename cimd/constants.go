@@ -3,7 +3,6 @@ package cimd
 import (
 	"fmt"
 	"sync/atomic"
-	"time"
 )
 
 const (
@@ -34,13 +33,11 @@ const (
 	DST_ADDR_RESP            = "021"
 	SVC_CENTER_RESP          = "060"
 	STATUS_CODE              = "061"
-	DISCHARGE_TIME           = "064"
+	DISCHARGE_TIME           = "063"
+	STATUS_REPORT_REQUEST    = "056"
 )
 
-var (
-	seqNum               int32 = 0
-	SVC_CENTER_TIMESTAMP       = []byte(time.Now().Format("20060102150405"))
-)
+var seqNum int32 = 0
 
 func NextSeqNum() []byte {
 	current := atomic.LoadInt32(&seqNum)

@@ -18,6 +18,7 @@ cimd_user: cimd_username
 cimd_pw: cimd_password
 port: 16001
 greeting: Welcome to go-cimd
+delivery_delay: 5
 ```
 
 ### build
