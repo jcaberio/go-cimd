@@ -32,3 +32,6 @@ $ ./go-cimd
 
 ### test with [ecimd2](https://github.com/VoyagerInnovations/ecimd2)
 ![image](http://g.recordit.co/27NJAT6gIC.gif)
+
+### view delivered messages count
+![image](http://g.recordit.co/tK6wewDOUD.gif)

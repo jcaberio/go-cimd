@@ -6,8 +6,11 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/jcaberio/go-cimd/util"
+	"github.com/jcaberio/go-cimd/view"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -68,12 +71,12 @@ func (p *PDU) Decode() {
 		arrivalTime := []byte(time.Now().Format("20060102150405"))
 		go func(arrivalTime []byte) {
 			const DELIVERY_SUCCESSFUL = "8"
-			log.Println("p.Data[STATUS_REPORT_REQUEST]: ", p.Data[STATUS_REPORT_REQUEST])
 			if p.Data[STATUS_REPORT_REQUEST] == DELIVERY_SUCCESSFUL {
 				deliveryDelay := viper.GetInt("delivery_delay")
 				time.Sleep(time.Duration(deliveryDelay) * time.Second)
 				deliveryTime := []byte(time.Now().Format("20060102150405"))
 				p.DeliverStatusReport(arrivalTime, deliveryTime)
+				view.CountChan <- atomic.AddUint64(&util.DeliveryCount, 1)
 			}
 
 		}(arrivalTime)
@@ -91,7 +94,7 @@ func (p *PDU) DeliverStatusReport(arrivalTime, deliveryTime []byte) {
 	byteToWrite = append(byteToWrite, STX)
 	byteToWrite = append(byteToWrite, DELIVER_STAT_REPORT_REQ...)
 	byteToWrite = append(byteToWrite, COLON)
-	byteToWrite = append(byteToWrite, NextSeqNum()...)
+	byteToWrite = append(byteToWrite, util.NextSeqNum()...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, DST_ADDR_RESP...)
 	byteToWrite = append(byteToWrite, COLON)
@@ -177,7 +180,9 @@ func (p *PDU) SubmitMessage() bool {
 	log.Println("DST_ADDR: ", p.Data[DST_ADDR])
 	log.Println("ORIG_ADDR: ", p.Data[ORIG_ADDR])
 	log.Println("USER_DATA: ", p.Data[USER_DATA])
-	return p.Data[DST_ADDR] != "" && p.Data[ORIG_ADDR] != "" && p.Data[USER_DATA] != ""
+	log.Println("USER_DATA_BINARY: ", p.Data[USER_DATA_BINARY])
+	return p.Data[DST_ADDR] != "" && p.Data[ORIG_ADDR] != "" &&
+		(p.Data[USER_DATA] != "" || p.Data[USER_DATA_BINARY] != "")
 
 }
 

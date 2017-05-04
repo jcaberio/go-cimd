@@ -1,10 +1,5 @@
 package cimd
 
-import (
-	"fmt"
-	"sync/atomic"
-)
-
 const (
 	STX                      = 2
 	ETX                      = 3
@@ -19,6 +14,7 @@ const (
 	DST_ADDR                 = "021"
 	ORIG_ADDR                = "023"
 	USER_DATA                = "033"
+	USER_DATA_BINARY         = "034"
 	SUCCESSFUL_DELIVERY      = "4"
 	DELIVER_STAT_REPORT_RESP = "73"
 	DELIVER_STAT_REPORT_REQ  = "23"
@@ -36,13 +32,3 @@ const (
 	DISCHARGE_TIME           = "063"
 	STATUS_REPORT_REQUEST    = "056"
 )
-
-var seqNum int32 = 0
-
-func NextSeqNum() []byte {
-	current := atomic.LoadInt32(&seqNum)
-	plusTwo := atomic.AddInt32(&seqNum, 2) & 0x00FF
-	atomic.StoreInt32(&seqNum, plusTwo)
-	n := fmt.Sprintf("%03d", current)
-	return []byte(n)
-}

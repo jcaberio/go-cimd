@@ -2,4 +2,5 @@ cimd_user: cimd_username
 cimd_pw: cimd_password
 port: 16001
 greeting: Welcome to go-cimdsim
-delivery_delay: 5
+delivery_delay: 2
+http_port: 8080
