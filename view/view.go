@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/spf13/viper"
 	"github.com/jcaberio/go-cimd/util"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -102,10 +102,16 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	homeTempl.Execute(w, &v)
 }
 
+func injectMO(w http.ResponseWriter, r *http.Request) {
+	moMsg := r.PostFormValue("mo_message")
+	util.MoMsgChan <- moMsg
+}
+
 func Render() {
 	addr := fmt.Sprint(":", viper.GetInt("http_port"))
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", serveWs)
+	http.HandleFunc("/mo", injectMO)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
 	}
@@ -115,9 +121,23 @@ const homeHTML = `<!DOCTYPE html>
 <html lang="en">
     <head>
         <title>CIMD</title>
+        <meta charset="utf-8">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     </head>
-    <body>
+    <body><div class="container">
+        <h3>MT</h3>
         <div>Delivered Messages: <span id="count">{{.Count}}</span></div>
+        <h3>MO</h3>
+        <div class="form-group">
+	    <form method="post" action="/mo" id="mo">
+	        <textarea name="mo_message" class="form-control" cols="35" wrap="soft"></textarea><br>
+                <button type="submit" class="btn btn-primary">Send</button>
+            </form>
+
+        </div>
         <script type="text/javascript">
             (function() {
                 var data = document.getElementById("count");
@@ -128,7 +148,18 @@ const homeHTML = `<!DOCTYPE html>
                 conn.onmessage = function(evt) {
                     data.textContent = evt.data;
                 }
+                $('#mo').submit(function(e){
+                    e.preventDefault();
+                    $.ajax({
+                        url:"/mo",
+                        type:"post",
+                        data:$('#mo').serialize(),
+                        success:function(){
+                            alert("Success");
+                        }
+                    });
+                });
             })();
         </script>
-    </body>
+    </div></body>
 </html>`

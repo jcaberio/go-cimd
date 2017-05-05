@@ -26,6 +26,8 @@ const (
 	UNEXPECTED_OPERATION     = "1"
 	ALIVE_RESP               = "90"
 	SUBMIT_MSG_RESP          = "53"
+	DELIVER_MESSAGE          = "20"
+	DELIVER_MESSAGE_RESP     = "70"
 	DST_ADDR_RESP            = "021"
 	SVC_CENTER_RESP          = "060"
 	STATUS_CODE              = "061"

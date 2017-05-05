@@ -53,6 +53,10 @@ func NewPDU(c net.Conn) (*PDU, error) {
 }
 
 func (p *PDU) Decode() {
+	go func() {
+		moMessage := <-util.MoMsgChan
+		p.DeliverMessaage(moMessage)
+	}()
 	switch string(p.CmdID[:]) {
 	case LOGIN:
 		log.Println("LOGIN COMMAND")
@@ -82,7 +86,8 @@ func (p *PDU) Decode() {
 		}(arrivalTime)
 	case DELIVER_STAT_REPORT_RESP:
 		log.Println("DELIVER_STAT_REPORT_RESP COMMAND")
-
+	case DELIVER_MESSAGE_RESP:
+		log.Println("DELIVER_MESSAGE_RESP COMMAND")
 	default:
 		log.Println("UNKNOWN COMMAND")
 		p.UnknownCmd()
@@ -218,6 +223,34 @@ func (p *PDU) UnknownCmd() {
 	byteToWrite = append(byteToWrite, ERROR_CODE...)
 	byteToWrite = append(byteToWrite, COLON)
 	byteToWrite = append(byteToWrite, UNEXPECTED_OPERATION...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, ETX)
+	p.Conn.Write(byteToWrite)
+}
+
+func (p *PDU) DeliverMessaage(message string) {
+	arrivalTime := []byte(time.Now().Format("20060102150405"))
+	byteToWrite := make([]byte, 0)
+	byteToWrite = append(byteToWrite, STX)
+	byteToWrite = append(byteToWrite, DELIVER_MESSAGE...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, p.SeqNum...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, DST_ADDR_RESP...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, []byte("Receiver")...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, ORIG_ADDR...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, []byte("Sender")...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, SVC_CENTER_RESP...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, arrivalTime...)
+	byteToWrite = append(byteToWrite, TAB)
+	byteToWrite = append(byteToWrite, USER_DATA...)
+	byteToWrite = append(byteToWrite, COLON)
+	byteToWrite = append(byteToWrite, []byte(message)...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, ETX)
 	p.Conn.Write(byteToWrite)

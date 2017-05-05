@@ -7,6 +7,7 @@ import (
 
 var seqNum int32 = 0
 var DeliveryCount uint64 = 0
+var MoMsgChan = make(chan string)
 
 func NextSeqNum() []byte {
 	current := atomic.LoadInt32(&seqNum)
