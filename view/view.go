@@ -5,16 +5,16 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/jcaberio/go-cimd/util"
 	"github.com/spf13/viper"
 )
 
 const (
-	writeWait = 10 * time.Second
+	writeWait = 60 * time.Second
 
 	// Time allowed to read the next pong message from the client.
 	pongWait = 60 * time.Second
@@ -24,17 +24,23 @@ const (
 )
 
 var (
-	CountChan = make(chan uint64)
-	homeTempl = template.Must(template.New("").Parse(homeHTML))
-	upgrader  = websocket.Upgrader{
+	DRCountChan = make(chan uint64)
+	SMCountChan = make(chan uint64)
+	homeTempl   = template.Must(template.New("").Parse(homeHTML))
+	upgrader    = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 )
 
+type MTCount struct {
+	DRCount uint64
+	SMCount uint64
+}
+
 func reader(ws *websocket.Conn) {
 	defer ws.Close()
-	ws.SetReadLimit(512)
+	ws.SetReadLimit(1024)
 	ws.SetReadDeadline(time.Now().Add(pongWait))
 	ws.SetPongHandler(func(string) error { ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
@@ -53,13 +59,17 @@ func writer(ws *websocket.Conn) {
 	}()
 	for {
 		select {
-		case count := <-CountChan:
-			log.Println("current count: ", count)
+		case drCount := <-DRCountChan:
+			log.Println("CURRENT DR DOUNT: ", drCount)
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := ws.WriteMessage(websocket.TextMessage, []byte(strconv.FormatUint(count, 10))); err != nil {
+			if err := ws.WriteJSON(MTCount{DRCount: drCount, SMCount: util.SubmitCount}); err != nil {
 				return
 			}
-
+		case smCount := <-SMCountChan:
+			log.Println("CURRENT SM DOUNT: ", smCount)
+			if err := ws.WriteJSON(MTCount{DRCount: util.DeliveryCount, SMCount: smCount}); err != nil {
+				return
+			}
 		case <-pingTicker.C:
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
@@ -93,11 +103,13 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	var v = struct {
-		Host  string
-		Count uint64
+		Host    string
+		DRCount uint64
+		SMCount uint64
 	}{
 		r.Host,
 		util.DeliveryCount,
+		util.SubmitCount,
 	}
 	homeTempl.Execute(w, &v)
 }
@@ -109,12 +121,11 @@ func injectMO(w http.ResponseWriter, r *http.Request) {
 
 func Render() {
 	addr := fmt.Sprint(":", viper.GetInt("http_port"))
-	http.HandleFunc("/", serveHome)
-	http.HandleFunc("/ws", serveWs)
-	http.HandleFunc("/mo", injectMO)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatal(err)
-	}
+	r := mux.NewRouter()
+	r.HandleFunc("/", serveHome)
+	r.HandleFunc("/ws", serveWs)
+	r.HandleFunc("/mo", injectMO)
+	log.Fatal(http.ListenAndServe(addr, r))
 }
 
 const homeHTML = `<!DOCTYPE html>
@@ -129,7 +140,16 @@ const homeHTML = `<!DOCTYPE html>
     </head>
     <body><div class="container">
         <h3>MT</h3>
-        <div>Delivered Messages: <span id="count">{{.Count}}</span></div>
+        <ul class="list-group">
+            <li class="list-group-item">
+                <span id="sm_count" class="badge">{{.SMCount}}</span>
+                Submitted Messages
+            </li>
+            <li class="list-group-item">
+                <span id="dr_count" class="badge">{{.DRCount}}</span>
+                Delivered Messages
+            </li>
+        </ul>
         <h3>MO</h3>
         <div class="form-group">
 	    <form method="post" action="/mo" id="mo">
@@ -140,13 +160,15 @@ const homeHTML = `<!DOCTYPE html>
         </div>
         <script type="text/javascript">
             (function() {
-                var data = document.getElementById("count");
+                var dr = document.getElementById("dr_count");
+                var sm = document.getElementById("sm_count");
                 var conn = new WebSocket("ws://{{.Host}}/ws");
                 conn.onclose = function(evt) {
-                    data.textContent = 'Connection closed';
+                    alert("Connection closed");
                 }
                 conn.onmessage = function(evt) {
-                    data.textContent = evt.data;
+                    dr.textContent = JSON.parse(evt.data).DRCount;
+                    sm.textContent = JSON.parse(evt.data).SMCount;
                 }
                 $('#mo').submit(function(e){
                     e.preventDefault();

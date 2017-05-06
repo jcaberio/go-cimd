@@ -55,7 +55,7 @@ func NewPDU(c net.Conn) (*PDU, error) {
 func (p *PDU) Decode() {
 	go func() {
 		moMessage := <-util.MoMsgChan
-		p.DeliverMessaage(moMessage)
+		p.DeliverMessage(moMessage)
 	}()
 	switch string(p.CmdID[:]) {
 	case LOGIN:
@@ -80,7 +80,7 @@ func (p *PDU) Decode() {
 				time.Sleep(time.Duration(deliveryDelay) * time.Second)
 				deliveryTime := []byte(time.Now().Format("20060102150405"))
 				p.DeliverStatusReport(arrivalTime, deliveryTime)
-				view.CountChan <- atomic.AddUint64(&util.DeliveryCount, 1)
+				view.DRCountChan <- atomic.AddUint64(&util.DeliveryCount, 1)
 			}
 
 		}(arrivalTime)
@@ -193,6 +193,7 @@ func (p *PDU) SubmitMessage() bool {
 
 func (p *PDU) SubmitMessageResp(b bool) {
 	if b {
+		view.SMCountChan <- atomic.AddUint64(&util.SubmitCount, 1)
 		arrivalTime := []byte(time.Now().Format("20060102150405"))
 		byteToWrite := make([]byte, 0)
 		byteToWrite = append(byteToWrite, STX)
@@ -228,7 +229,7 @@ func (p *PDU) UnknownCmd() {
 	p.Conn.Write(byteToWrite)
 }
 
-func (p *PDU) DeliverMessaage(message string) {
+func (p *PDU) DeliverMessage(message string) {
 	arrivalTime := []byte(time.Now().Format("20060102150405"))
 	byteToWrite := make([]byte, 0)
 	byteToWrite = append(byteToWrite, STX)
