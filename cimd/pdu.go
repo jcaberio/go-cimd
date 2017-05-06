@@ -13,7 +13,10 @@ import (
 	"github.com/jcaberio/go-cimd/view"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"golang.org/x/sync/syncmap"
 )
+
+var RemoteClients = syncmap.Map{}
 
 type PDU struct {
 	Conn   net.Conn
@@ -123,6 +126,7 @@ func (p *PDU) DeliverStatusReport(arrivalTime, deliveryTime []byte) {
 
 func (p *PDU) LoginResp(b bool) {
 	if b {
+		RemoteClients.Store(p.Conn.RemoteAddr().String(), true)
 		byteToWrite := make([]byte, 0)
 		byteToWrite = append(byteToWrite, STX)
 		byteToWrite = append(byteToWrite, LOGIN_RESP...)
@@ -133,6 +137,7 @@ func (p *PDU) LoginResp(b bool) {
 		p.Conn.Write(byteToWrite)
 		log.Println("VALID LOGIN")
 	} else {
+		RemoteClients.Store(p.Conn.RemoteAddr().String(), false)
 		byteToWrite := make([]byte, 0)
 		byteToWrite = append(byteToWrite, STX)
 		byteToWrite = append(byteToWrite, GENERAL_ERROR_RESP...)
@@ -150,6 +155,7 @@ func (p *PDU) LoginResp(b bool) {
 }
 
 func (p *PDU) LogoutResp() {
+	RemoteClients.Store(p.Conn.RemoteAddr().String(), false)
 	byteToWrite := make([]byte, 0)
 	byteToWrite = append(byteToWrite, STX)
 	byteToWrite = append(byteToWrite, LOGOUT_RESP...)
@@ -192,8 +198,8 @@ func (p *PDU) SubmitMessage() bool {
 }
 
 func (p *PDU) SubmitMessageResp(b bool) {
-	if b {
-		view.SMCountChan <- atomic.AddUint64(&util.SubmitCount, 1)
+	if b && p.isLogin() {
+		go func() {view.SMCountChan <- atomic.AddUint64(&util.SubmitCount, 1)}()
 		arrivalTime := []byte(time.Now().Format("20060102150405"))
 		byteToWrite := make([]byte, 0)
 		byteToWrite = append(byteToWrite, STX)
@@ -255,4 +261,9 @@ func (p *PDU) DeliverMessage(message string) {
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, ETX)
 	p.Conn.Write(byteToWrite)
+}
+
+func (p *PDU) isLogin() bool {
+	login, _ := RemoteClients.Load(p.Conn.RemoteAddr().String())
+	return login.(bool)
 }
