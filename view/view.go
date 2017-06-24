@@ -60,13 +60,13 @@ func writer(ws *websocket.Conn) {
 	for {
 		select {
 		case drCount := <-DRCountChan:
-			log.Println("CURRENT DR DOUNT: ", drCount)
+			log.Println("CURRENT DR COUNT: ", drCount)
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.WriteJSON(MTCount{DRCount: drCount, SMCount: util.SubmitCount}); err != nil {
 				return
 			}
 		case smCount := <-SMCountChan:
-			log.Println("CURRENT SM DOUNT: ", smCount)
+			log.Println("CURRENT SM COUNT: ", smCount)
 			if err := ws.WriteJSON(MTCount{DRCount: util.DeliveryCount, SMCount: smCount}); err != nil {
 				return
 			}
