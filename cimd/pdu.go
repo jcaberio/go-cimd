@@ -75,18 +75,18 @@ func (p *PDU) Decode() {
 	case SUBMIT_MSG:
 		log.Println("SUBMIT_MESSAGE COMMAND")
 		p.SubmitMessageResp(p.SubmitMessage())
-		arrivalTime := []byte(time.Now().Format("20060102150405"))
-		go func(arrivalTime []byte) {
-			const DELIVERY_SUCCESSFUL = "8"
-			if p.Data[STATUS_REPORT_REQUEST] == DELIVERY_SUCCESSFUL {
-				deliveryDelay := viper.GetInt("delivery_delay")
-				time.Sleep(time.Duration(deliveryDelay) * time.Second)
-				deliveryTime := []byte(time.Now().Format("20060102150405"))
-				p.DeliverStatusReport(arrivalTime, deliveryTime)
-				view.DRCountChan <- atomic.AddUint64(&util.DeliveryCount, 1)
-			}
+		// arrivalTime := []byte(time.Now().Format("20060102150405"))
+		// go func(arrivalTime []byte) {
+		// 	const DELIVERY_SUCCESSFUL = "8"
+		// 	if p.Data[STATUS_REPORT_REQUEST] == DELIVERY_SUCCESSFUL {
+		// 		deliveryDelay := viper.GetInt("delivery_delay")
+		// 		time.Sleep(time.Duration(deliveryDelay) * time.Second)
+		// 		deliveryTime := []byte(time.Now().Format("20060102150405"))
+		// 		p.DeliverStatusReport(arrivalTime, deliveryTime)
+		// 		view.DRCountChan <- atomic.AddUint64(&util.DeliveryCount, 1)
+		// 	}
 
-		}(arrivalTime)
+		// }(arrivalTime)
 	case DELIVER_STAT_REPORT_RESP:
 		log.Println("DELIVER_STAT_REPORT_RESP COMMAND")
 	case DELIVER_MESSAGE_RESP:
@@ -169,8 +169,8 @@ func (p *PDU) LogoutResp() {
 func (p *PDU) Authenticate() bool {
 	userIdentity := p.Data[USER_IDENTITY]
 	password := p.Data[PASSWORD]
-	ui := viper.GetString("cimd_user")
-	pw := viper.GetString("cimd_pw")
+	ui := viper.GetString("user")
+	pw := viper.GetString("password")
 	log.Println("username: ", ui)
 	log.Println("password: ", pw)
 	return userIdentity == ui && password == pw
@@ -216,7 +216,10 @@ func (p *PDU) SubmitMessageResp(b bool) {
 		byteToWrite = append(byteToWrite, arrivalTime...)
 		byteToWrite = append(byteToWrite, TAB)
 		byteToWrite = append(byteToWrite, ETX)
-		p.Conn.Write(byteToWrite)
+		_, err := p.Conn.Write(byteToWrite)
+		if err != nil {
+			log.Println("MT WRITE ERR: ", err)
+		}
 	}
 }
 
@@ -245,11 +248,11 @@ func (p *PDU) DeliverMessage(message string) {
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, DST_ADDR_RESP...)
 	byteToWrite = append(byteToWrite, COLON)
-	byteToWrite = append(byteToWrite, []byte("Receiver")...)
+	byteToWrite = append(byteToWrite, []byte("2109483172850")...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, ORIG_ADDR...)
 	byteToWrite = append(byteToWrite, COLON)
-	byteToWrite = append(byteToWrite, []byte("Sender")...)
+	byteToWrite = append(byteToWrite, []byte("639217368220")...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, SVC_CENTER_RESP...)
 	byteToWrite = append(byteToWrite, COLON)
@@ -260,7 +263,11 @@ func (p *PDU) DeliverMessage(message string) {
 	byteToWrite = append(byteToWrite, []byte(message)...)
 	byteToWrite = append(byteToWrite, TAB)
 	byteToWrite = append(byteToWrite, ETX)
-	p.Conn.Write(byteToWrite)
+	_, err := p.Conn.Write(byteToWrite)
+	log.Println("MO MESSAGE: ", message)
+	if err != nil {
+        log.Println("MO WRITE ERR: ", err)
+	}
 }
 
 func (p *PDU) isLogin() bool {
