@@ -6,11 +6,14 @@ import (
 	"log"
 	"net/http"
 	"time"
+	"sync/atomic"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/jcaberio/go-cimd/util"
 	"github.com/spf13/viper"
+	"github.com/jcaberio/go-cimd/cimd"
+	"encoding/json"
 )
 
 const (
@@ -24,8 +27,6 @@ const (
 )
 
 var (
-	DRCountChan = make(chan uint64)
-	SMCountChan = make(chan uint64)
 	homeTempl   = template.Must(template.New("").Parse(homeHTML))
 	upgrader    = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -34,7 +35,7 @@ var (
 )
 
 type MTCount struct {
-	DRCount uint64
+	TpsCount int64
 	SMCount uint64
 }
 
@@ -53,23 +54,32 @@ func reader(ws *websocket.Conn) {
 
 func writer(ws *websocket.Conn) {
 	pingTicker := time.NewTicker(pingPeriod)
+	writeTicker := time.NewTicker(time.Millisecond * 1000)
 	defer func() {
 		pingTicker.Stop()
 		ws.Close()
 	}()
 	for {
 		select {
-		case drCount := <-DRCountChan:
-			log.Println("CURRENT DR COUNT: ", drCount)
-			ws.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := ws.WriteJSON(MTCount{DRCount: drCount, SMCount: util.SubmitCount}); err != nil {
+		case  <- writeTicker.C:
+			if err := ws.WriteJSON(MTCount{TpsCount: atomic.LoadInt64(&util.TpsCount), SMCount: atomic.LoadUint64(&util.SubmitCount)}); err != nil {
 				return
 			}
-		case smCount := <-SMCountChan:
-			log.Println("CURRENT SM COUNT: ", smCount)
-			if err := ws.WriteJSON(MTCount{DRCount: util.DeliveryCount, SMCount: smCount}); err != nil {
+			atomic.StoreInt64(&util.TpsCount, 0)
+			msgListStr := cimd.RedisClient.LRange(cimd.MsgList, 0, -1).Val()
+			msgList := make([]util.Message, 0)
+			var msgObj util.Message
+			for _, msgStr := range msgListStr {
+				json.Unmarshal([]byte(msgStr), &msgObj)
+				msgList = append(msgList, msgObj)
+			}
+			if err := ws.WriteJSON(struct {
+				Messages []util.Message
+			}{Messages: msgList}); err != nil {
+				log.Println("Error in writing latest messages to web socket")
 				return
 			}
+		    
 		case <-pingTicker.C:
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
@@ -102,29 +112,40 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	var v = struct {
-		Host    string
-		DRCount uint64
-		SMCount uint64
-	}{
-		r.Host,
-		util.DeliveryCount,
-		util.SubmitCount,
-	}
-	homeTempl.Execute(w, &v)
+	// var v = struct {
+	// 	Host    string
+	// 	DRCount uint64
+	// 	SMCount uint64
+	// }{
+	// 	r.Host,
+	// 	util.DeliveryCount,
+	// 	util.SubmitCount,
+	// }
+	homeTempl.Execute(w, nil)
 }
 
 func injectMO(w http.ResponseWriter, r *http.Request) {
 	moMsg := r.PostFormValue("mo_message")
-	util.MoMsgChan <- moMsg
+	select {
+	case util.MoMsgChan <- moMsg:
+		fmt.Println("SENT: ", moMsg)
+	default:
+		fmt.Println("NOT SENT: ", moMsg)
+	}
+
+}
+
+func reset(w http.ResponseWriter, r *http.Request) {
+	atomic.StoreUint64(&util.SubmitCount, 0)
 }
 
 func Render() {
-	addr := fmt.Sprint(":", viper.GetInt("http_port"))
+	addr := fmt.Sprint("0.0.0.0:", viper.GetInt("http_port"))
 	r := mux.NewRouter()
 	r.HandleFunc("/", serveHome)
 	r.HandleFunc("/ws", serveWs)
 	r.HandleFunc("/mo", injectMO)
+	r.HandleFunc("/reset", reset)
 	log.Fatal(http.ListenAndServe(addr, r))
 }
 
@@ -142,14 +163,33 @@ const homeHTML = `<!DOCTYPE html>
         <h3>MT</h3>
         <ul class="list-group">
             <li class="list-group-item">
-                <span id="sm_count" class="badge">{{.SMCount}}</span>
+                <span id="sm_count" class="badge">0</span>
                 Submitted Messages
             </li>
-            <li class="list-group-item">
-                <span id="dr_count" class="badge">{{.DRCount}}</span>
-                Delivered Messages
+			<li class="list-group-item">
+                <span id="tps" class="badge">0</span>
+                Request-per-second
             </li>
-        </ul>
+		</ul>
+		<div class="form-group">
+	    <form method="post" action="/reset" id="reset">
+                <button type="submit" class="btn btn-warning">Reset</button>
+        </form>
+        </div>
+
+    <h4>Latest Messages</h4>	
+	<table id="arrmsg" class="table table-hover">
+		<thead>
+		<tr>
+		<th>source</th>
+		<th>destination</th>
+		<th>message</th>
+		</tr>
+		</thead>
+
+		<tbody></tbody>
+	</table>
+
         <h3>MO</h3>
         <div class="form-group">
 	    <form method="post" action="/mo" id="mo">
@@ -160,27 +200,54 @@ const homeHTML = `<!DOCTYPE html>
         </div>
         <script type="text/javascript">
             (function() {
-                var dr = document.getElementById("dr_count");
-                var sm = document.getElementById("sm_count");
-                var conn = new WebSocket("ws://{{.Host}}/ws");
-                conn.onclose = function(evt) {
-                    alert("Connection closed");
-                }
-                conn.onmessage = function(evt) {
-                    dr.textContent = JSON.parse(evt.data).DRCount;
-                    sm.textContent = JSON.parse(evt.data).SMCount;
-                }
-                $('#mo').submit(function(e){
-                    e.preventDefault();
-                    $.ajax({
-                        url:"/mo",
-                        type:"post",
-                        data:$('#mo').serialize(),
-                        success:function(){
-                            alert("Success");
-                        }
-                    });
-                });
+							var sm = document.getElementById("sm_count");
+							var tps =document.getElementById("tps");
+							var conn = new WebSocket("ws://" + window.location.host + "/ws");
+							conn.onclose = function(evt) {
+								alert("Connection closed");
+							}
+							conn.onmessage = function(evt) {
+								console.log(evt.data)
+								sm.textContent = JSON.parse(evt.data).SMCount;
+								tps.textContent = JSON.parse(evt.data).TpsCount;
+								var elems = JSON.parse(evt.data).Messages;		
+								if(elems !== undefined && elems.length > 0) {
+									var tbody = $('#arrmsg tbody');
+									tbody.empty();
+									var props = ["sender", "recipient", "message"];
+    			$.each(elems, function(i, elem) {
+      				var tr = $('<tr>');
+      				$.each(props, function(i, prop) {
+        				$('<td>').html(elem[prop]).appendTo(tr);
+      				});
+      				tbody.append(tr);
+    			});
+			}
+							}
+
+							$('#mo').submit(function(e){
+								e.preventDefault();
+								$.ajax({
+									url:"/mo",
+									type:"post",
+									data:$('#mo').serialize(),
+									success:function(){
+										alert("Success");
+									}
+								});
+							});
+
+							$('#reset').submit(function(e){
+								e.preventDefault();
+								$.ajax({
+									url:"/reset",
+									type:"post",
+									success:function(){
+										alert("Reset Submitted Messages");
+									}
+								});
+							});
+
             })();
         </script>
     </div></body>
